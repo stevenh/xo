@@ -94,7 +94,7 @@ WHERE n.nspname = %%schema string%% AND c.relkind = %%relkind string%%
 ENDSQL
 
 # postgres table column list query
-FIELDS='FieldOrdinal int,ColumnName string,DataType string,NotNull bool,DefaultValue sql.NullString,IsPrimaryKey bool'
+FIELDS='FieldOrdinal int,ColumnName string,DataType string,NotNull bool,DefaultValue sql.NullString,IsPrimaryKey bool,IsAutoIncrement bool'
 COMMENT='Column represents column info.'
 $XOBIN $PGDB -N -M -B -T Column -F PgTableColumns -Z "$FIELDS" --query-type-comment "$COMMENT" -o $DEST $EXTRA << ENDSQL
 SELECT
@@ -242,7 +242,8 @@ SELECT
   IF(data_type = 'enum', column_name, column_type) AS data_type,
   IF(is_nullable = 'YES', false, true) AS not_null,
   column_default AS default_value,
-  IF(column_key = 'PRI', true, false) AS is_primary_key
+  IF(column_key = 'PRI', true, false) AS is_primary_key,
+  IF(extra = 'auto_increment', true, false) AS is_auto_increment
 FROM information_schema.columns
 WHERE table_schema = %%schema string%% AND table_name = %%table string%%
 ORDER BY ordinal_position

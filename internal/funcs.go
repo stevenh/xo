@@ -12,21 +12,27 @@ import (
 // NewTemplateFuncs returns a set of template funcs bound to the supplied args.
 func (a *ArgType) NewTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
-		"colcount":       a.colcount,
-		"colnames":       a.colnames,
-		"colnamesquery":  a.colnamesquery,
-		"colprefixnames": a.colprefixnames,
-		"colvals":        a.colvals,
-		"fieldnames":     a.fieldnames,
-		"goparamlist":    a.goparamlist,
-		"reniltype":      a.reniltype,
-		"retype":         a.retype,
-		"shortname":      a.shortname,
-		"convext":        a.convext,
-		"schema":         a.schemafn,
-		"colname":        a.colname,
-		"hascolumn":      a.hascolumn,
-		"hasfield":       a.hasfield,
+		"colcount":           a.colcount,
+		"colnamesslice":      a.colnamesslice,
+		"colnames":           a.colnames,
+		"colnamesqueryslice": a.colnamesqueryslice,
+		"colnamesquery":      a.colnamesquery,
+		"colprefixnames":     a.colprefixnames,
+		"colvals":            a.colvals,
+		"fieldnameslist":     a.fieldnameslist,
+		"fieldnamesslice":    a.fieldnamesslice,
+		"fieldnames":         a.fieldnames,
+		"goparamlist":        a.goparamlist,
+		"goparam":            a.goparam,
+		"reniltype":          a.reniltype,
+		"retype":             a.retype,
+		"shortname":          a.shortname,
+		"convext":            a.convext,
+		"schema":             a.schemafn,
+		"colname":            a.colname,
+		"hassuffix":          strings.HasSuffix,
+		"hascolumn":          a.hascolumn,
+		"hasfield":           a.hasfield,
 	}
 }
 
@@ -159,6 +165,10 @@ func (a *ArgType) shortname(typ string, scopeConflicts ...interface{}) string {
 	return v
 }
 
+func (a *ArgType) colnamesslice(fields []*Field, ignoreNames []string) string {
+	return a.colnames(fields, ignoreNames...)
+}
+
 // colnames creates a list of the column names found in fields, excluding any
 // Field with Name contained in ignoreNames.
 //
@@ -186,6 +196,20 @@ func (a *ArgType) colnames(fields []*Field, ignoreNames ...string) string {
 	}
 
 	return str
+}
+
+// fieldnameslist returns the field names for fields.
+func (a *ArgType) fieldnameslist(fields []*Field) []string {
+	names := make([]string, len(fields))
+	for i, f := range fields {
+		names[i] = f.Name
+	}
+
+	return names
+}
+
+func (a *ArgType) colnamesqueryslice(fields []*Field, sep string, ignoreNames []string) string {
+	return a.colnamesquery(fields, sep, ignoreNames...)
 }
 
 // colnamesquery creates a list of the column names in fields as a query and
@@ -271,6 +295,10 @@ func (a *ArgType) colvals(fields []*Field, ignoreNames ...string) string {
 	}
 
 	return str
+}
+
+func (a *ArgType) fieldnamesslice(fields []*Field, prefix string, ignoreNames []string) string {
+	return a.fieldnames(fields, prefix, ignoreNames...)
 }
 
 // fieldnames creates a list of field names from fields of the adding the
@@ -374,6 +402,22 @@ var goReservedNames = map[string]string{
 	"complex128": "c128",
 }
 
+// goparam converts a field and index into its named Go parameter.
+func (a *ArgType) goparam(f *Field, i int) string {
+	s := "v" + strconv.Itoa(i)
+	if len(f.Name) > 0 {
+		n := strings.Split(snaker.CamelToSnake(f.Name), "_")
+		s = strings.ToLower(n[0]) + f.Name[len(n[0]):]
+	}
+
+	// check go reserved names
+	if r, ok := goReservedNames[strings.ToLower(s)]; ok {
+		s = r
+	}
+
+	return s
+}
+
 // goparamlist converts a list of fields into their named Go parameters,
 // skipping any Field with Name contained in ignoreNames. addType will cause
 // the go Type to be added after each variable name. addPrefix will cause the
@@ -410,6 +454,7 @@ func (a *ArgType) goparamlist(fields []*Field, addPrefix bool, addType bool, ign
 			s = r
 		}
 
+		str = str + ", " + a.goparam(f, i)
 		// add the go type
 		if addType {
 			s += " " + a.retype(f.Type)
