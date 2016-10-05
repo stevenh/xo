@@ -457,7 +457,8 @@ func (tl TypeLoader) LoadRelkind(args *ArgType, relType RelType) (map[string]*Ty
 	for _, ti := range tableList {
 		// create template
 		typeTpl := &Type{
-			Name:    inflector.Singularize(SnakeToIdentifier(ti.TableName)),
+			//Name:    inflector.Singularize(SnakeToIdentifier(ti.TableName)),
+			Name:    SnakeToIdentifier(ti.TableName),
 			Schema:  args.Schema,
 			RelType: relType,
 			Fields:  []*Field{},
@@ -475,7 +476,7 @@ func (tl TypeLoader) LoadRelkind(args *ArgType, relType RelType) (map[string]*Ty
 
 	// generate table templates
 	for _, t := range tableMap {
-		err = args.ExecuteTemplate(TypeTemplate, t.Name, "", t)
+		err = args.ExecuteTemplate(TypeTemplate, t.Table.TableName, "", t)
 		if err != nil {
 			return nil, err
 		}
@@ -523,7 +524,15 @@ func (tl TypeLoader) LoadColumns(args *ArgType, typeTpl *Type) error {
 
 		// set primary key
 		if c.IsPrimaryKey && len(columnList) > 1 {
-			typeTpl.PrimaryKey = f
+			if typeTpl.PrimaryKey == nil {
+				typeTpl.PrimaryKey = make([]*Field, 0, 2)
+			}
+			typeTpl.PrimaryKey = append(typeTpl.PrimaryKey, f)
+		}
+
+		// set auto increment
+		if c.IsAutoIncrement {
+			typeTpl.AutoIncrement = f
 		}
 
 		// append col to template fields
@@ -553,7 +562,7 @@ func (tl TypeLoader) LoadForeignKeys(args *ArgType, tableMap map[string]*Type) (
 
 	// generate templates
 	for _, fk := range fkMap {
-		err = args.ExecuteTemplate(ForeignKeyTemplate, fk.Type.Name, fk.ForeignKey.ForeignKeyName, fk)
+		err = args.ExecuteTemplate(ForeignKeyTemplate, fk.Type.Table.TableName, fk.ForeignKey.ForeignKeyName, fk)
 		if err != nil {
 			return nil, err
 		}
@@ -606,7 +615,11 @@ func (tl TypeLoader) LoadTableForeignKeys(args *ArgType, tableMap map[string]*Ty
 
 		// no ref col, but have ref tpl, so use primary key
 		if refTpl != nil && refCol == nil {
-			refCol = refTpl.PrimaryKey
+			if len(refTpl.PrimaryKey) > 1 {
+				return errors.New("unsupported multi field primary key")
+			} else if len(refTpl.PrimaryKey) == 1 {
+				refCol = refTpl.PrimaryKey[0]
+			}
 		}
 
 		// check everything was found
@@ -648,7 +661,7 @@ func (tl TypeLoader) LoadIndexes(args *ArgType, tableMap map[string]*Type) (map[
 
 	// generate templates
 	for _, ix := range ixMap {
-		err = args.ExecuteTemplate(IndexTemplate, ix.Type.Name, ix.Index.IndexName, ix)
+		err = args.ExecuteTemplate(IndexTemplate, ix.Type.Table.TableName, ix.Index.IndexName, ix)
 		if err != nil {
 			return nil, err
 		}
@@ -698,8 +711,10 @@ func (tl TypeLoader) LoadTableIndexes(args *ArgType, typeTpl *Type, ixMap map[st
 	if pk == nil {
 		for _, f := range typeTpl.Fields {
 			if f.Col.IsPrimaryKey {
-				pk = f
-				break
+				if pk == nil {
+					pk = make([]*Field, 0, 2)
+				}
+				pk = append(pk, f)
 			}
 		}
 	}
@@ -707,13 +722,13 @@ func (tl TypeLoader) LoadTableIndexes(args *ArgType, typeTpl *Type, ixMap map[st
 	// if no primary key index loaded, but a primary key column was defined in
 	// the type, then create the definition here. this is needed for sqlite, as
 	// sqlite doesn't define primary keys in its index list
-	if args.LoaderType != "ora" && !priIxLoaded && pk != nil {
-		ixName := typeTpl.Table.TableName + "_" + pk.Col.ColumnName + "_pkey"
+	if args.LoaderType != "ora" && !priIxLoaded && len(pk) == 1 {
+		ixName := typeTpl.Table.TableName + "_" + pk[0].Col.ColumnName + "_pkey"
 		ixMap[ixName] = &Index{
-			FuncName: typeTpl.Name + "By" + pk.Name,
+			FuncName: typeTpl.Name + "By" + pk[0].Name,
 			Schema:   args.Schema,
 			Type:     typeTpl,
-			Fields:   []*Field{pk},
+			Fields:   []*Field{pk[0]},
 			Index: &models.Index{
 				IndexName: ixName,
 				IsUnique:  true,

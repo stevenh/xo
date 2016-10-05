@@ -271,5 +271,79 @@ func SnakeToIdentifier(s string) string {
 	// fix 2 or more __
 	s = underscoreRE.ReplaceAllString(s, "_")
 
-	return snaker.SnakeToCamel(s)
+	// Uppercase Known acronyms
+	for _, v := range []string{
+		"p2p",
+		"ftp",
+		"cpu",
+		"url",
+		"rdp",
+		"cfv",
+		//"eta",
+		//"spla",
+	} {
+		s = strings.Replace(s, v, strings.ToUpper(v), -1)
+	}
+
+	// Direct Maps
+	for k, v := range map[string]string{
+		"profileverid":               "ProfileVerID",
+		"gf_machine_profilever":      "GfMachineProfileVer",
+		"online_eta":                 "OnlineETA",
+		"autorestart_interval":       "AutoRestartInterval",
+		"autorestart_interval_force": "AutoRestartIntervalForce",
+		"autorestart_time":           "AutoRestartTime",
+		"autorestart_time_force":     "AutoRestartTimeForce",
+		"accountserviceid":           "AccountServiceID",
+		"showmod":                    "ShowMod",
+		"maxcrashes":                 "MaxCrashes",
+		"altexe":                     "AltExe",
+		"machineporttypeid":          "MachinePortTypeID",
+		"readonly":                   "ReadOnly",
+		"webadmin":                   "WebAdmin",
+		"has_vc":                     "HasVC",
+		"has_ds":                     "HasDS",
+		"has_gs":                     "HasGS",
+		"profilestateid":             "ProfileStateID",
+		"spla":                       "SPLA",
+		"gameversionid":              "GameVersionID",
+		"machineportid":              "MachinePortID",
+	} {
+		if s == k {
+			s = v
+		}
+	}
+
+	// Tilecase Known Words
+	for _, v := range []string{
+		"title",
+		"dir",
+		"prefix",
+		"key",
+		"login",
+		"package",
+		"threaded",
+		"family",
+		"blank",
+		"site",
+		"type",
+		"allow",
+		//"ver",
+	} {
+		s = strings.Replace(s, v, strings.Title(v), -1)
+	}
+
+	s = snaker.SnakeToCamel(s)
+
+	// Uppercase trailing id
+	if strings.HasSuffix(s, "id") {
+		s = s[:len(s)-2] + "ID"
+	}
+
+	// Uppercase words if prefix is 'Is'
+	if strings.HasPrefix(s, "Is") {
+		s = "Is" + strings.ToUpper(s[2:3]) + s[3:]
+	}
+
+	return s
 }
