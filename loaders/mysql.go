@@ -171,6 +171,9 @@ switchDT:
 			nilVal = "mysql.NullTime{}"
 			typ = "mysql.NullTime"
 		}
+	case "time":
+		// TODO(steve): create a new type to deal with this properly
+		typ = "sql.RawBytes"
 
 	default:
 		if strings.HasPrefix(dt, args.Schema+".") {
