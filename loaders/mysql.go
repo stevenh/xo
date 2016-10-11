@@ -191,6 +191,9 @@ switchDT:
 			nilVal = "mysql.NullTime{}"
 			typ = "mysql.NullTime"
 		}
+	case "time":
+		// TODO(steve): create a new type to deal with this properly
+		typ = "sql.RawBytes"
 
 	case "time":
 		// time is not supported by the MySQL driver. Can parse the string to time.Time in the user code.

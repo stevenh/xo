@@ -12,6 +12,7 @@ import (
 // NewTemplateFuncs returns a set of template funcs bound to the supplied args.
 func (a *ArgType) NewTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
+		"add":                a.add,
 		"colcount":           a.colcount,
 		"colnamesslice":      a.colnamesslice,
 		"colnames":           a.colnames,
@@ -36,7 +37,11 @@ func (a *ArgType) NewTemplateFuncs() template.FuncMap {
 	}
 }
 
-// retype checks typ against known types, and prefixing
+// add adds two ints
+func (a *ArgType) add(x, y int) int {
+	return x + y
+}
+
 // ArgType.CustomTypePackage (if applicable).
 func (a *ArgType) retype(typ string) string {
 	if strings.Contains(typ, ".") {
