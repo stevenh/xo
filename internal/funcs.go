@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 	"text/template"
@@ -16,6 +17,7 @@ func (a *ArgType) NewTemplateFuncs() template.FuncMap {
 		"colcount":           a.colcount,
 		"colnamesslice":      a.colnamesslice,
 		"colnames":           a.colnames,
+		"colnamessorted":     a.colnamessorted,
 		"colnamesqueryslice": a.colnamesqueryslice,
 		"colnamesquery":      a.colnamesquery,
 		"colprefixnames":     a.colprefixnames,
@@ -172,6 +174,15 @@ func (a *ArgType) shortname(typ string, scopeConflicts ...interface{}) string {
 
 func (a *ArgType) colnamesslice(fields []*Field, ignoreNames []string) string {
 	return a.colnames(fields, ignoreNames...)
+}
+
+func (a *ArgType) colnamessorted(fields []*Field) string {
+	cols := make([]string, len(fields))
+	for i, f := range fields {
+		cols[i] = `"` + f.Name + `"`
+	}
+	sort.Strings(cols)
+	return strings.Join(cols, ", ")
 }
 
 // colnames creates a list of the column names found in fields, excluding any
