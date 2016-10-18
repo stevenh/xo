@@ -94,7 +94,7 @@ func (a *ArgType) ParseQuery(mask string, interpol bool) (string, []*QueryParam)
 }
 
 // IntRE matches Go int types.
-var IntRE = regexp.MustCompile(`^int(32|64)?$`)
+var IntRE = regexp.MustCompile(`^int\d*$`)
 
 // PrecScaleRE is the regexp that matches "(precision[,scale])" definitions in a
 // database.

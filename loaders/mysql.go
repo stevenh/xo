@@ -122,7 +122,15 @@ switchDT:
 			typ = "sql.NullString"
 		}
 
-	case "tinyint", "smallint":
+	case "tinyint":
+		nilVal = "0"
+		typ = "int8"
+		if nullable {
+			nilVal = "sql.NullInt64{}"
+			typ = "sql.NullInt64"
+		}
+
+	case "smallint":
 		nilVal = "0"
 		typ = "int16"
 		if nullable {
