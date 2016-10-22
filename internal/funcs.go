@@ -176,12 +176,36 @@ func (a *ArgType) colnamesslice(fields []*Field, ignoreNames []string) string {
 	return a.colnames(fields, ignoreNames...)
 }
 
+type fieldSorter struct {
+	fields []*Field
+}
+
+// Len is part of sort.Interface.
+func (s *fieldSorter) Len() int {
+	return len(s.fields)
+}
+
+// Swap is part of sort.Interface.
+func (s *fieldSorter) Swap(i, j int) {
+	s.fields[i], s.fields[j] = s.fields[j], s.fields[i]
+}
+
+// Less is part of sort.Interface.
+func (s *fieldSorter) Less(i, j int) bool {
+	return strings.ToLower(s.fields[i].Col.ColumnName) < strings.ToLower(s.fields[j].Col.ColumnName)
+}
+
+// colnamessorted returns a list of field names sorted by lowercased column names
 func (a *ArgType) colnamessorted(fields []*Field) string {
-	cols := make([]string, len(fields))
-	for i, f := range fields {
+	fs := &fieldSorter{fields: make([]*Field, len(fields))}
+	// Use copy so we don't effect the originals order
+	copy(fs.fields, fields)
+	sort.Sort(fs)
+
+	cols := make([]string, len(fs.fields))
+	for i, f := range fs.fields {
 		cols[i] = `"` + f.Name + `"`
 	}
-	sort.Strings(cols)
 	return strings.Join(cols, ", ")
 }
 
