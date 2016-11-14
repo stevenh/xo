@@ -26,6 +26,7 @@ func (a *ArgType) NewTemplateFuncs() template.FuncMap {
 		"fieldnameslist":     a.fieldnameslist,
 		"fieldnamesslice":    a.fieldnamesslice,
 		"fieldnames":         a.fieldnames,
+		"fieldtag":           a.fieldtag,
 		"goparamlist":        a.goparamlist,
 		"goparam":            a.goparam,
 		"reniltype":          a.reniltype,
@@ -235,6 +236,22 @@ func (a *ArgType) colnames(fields []*Field, ignoreNames ...string) string {
 	}
 
 	return str
+}
+
+// fieldtag returns the fieldtag for the field f.
+func (a *ArgType) fieldtag(f *Field) string {
+	parts := []string{f.Col.ColumnName}
+	if f.Col.IsAutoIncrement {
+		parts = append(parts, "autoinc")
+	}
+	if f.Col.IsPrimaryKey {
+		parts = append(parts, "pk")
+	}
+	if f.Col.DefaultValue.Valid {
+		parts = append(parts, "default")
+	}
+
+	return strings.Join(parts, ",")
 }
 
 // fieldnameslist returns the field names for fields.
