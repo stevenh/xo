@@ -88,8 +88,8 @@ switchDT:
 			nilVal = "false"
 			typ = "bool"
 			if nullable {
-				nilVal = "sql.NullBool{}"
-				typ = "sql.NullBool"
+				nilVal = "msql.NullBool{}"
+				typ = "msql.NullBool"
 			}
 			break switchDT
 		} else if precision <= 8 {
@@ -102,72 +102,72 @@ switchDT:
 			typ = "uint64"
 		}
 		if nullable {
-			nilVal = "sql.NullInt64{}"
-			typ = "sql.NullInt64"
+			nilVal = "msql.NullInt64{}"
+			typ = "msql.NullInt64"
 		}
 
 	case "bool", "boolean":
 		nilVal = "false"
 		typ = "bool"
 		if nullable {
-			nilVal = "sql.NullBool{}"
-			typ = "sql.NullBool"
+			nilVal = "msql.NullBool{}"
+			typ = "msql.NullBool"
 		}
 
 	case "char", "varchar", "tinytext", "text", "mediumtext", "longtext":
 		nilVal = `""`
 		typ = "string"
 		if nullable {
-			nilVal = "sql.NullString{}"
-			typ = "sql.NullString"
+			nilVal = "msql.NullString{}"
+			typ = "msql.NullString"
 		}
 
 	case "tinyint":
 		nilVal = "0"
 		typ = "int8"
 		if nullable {
-			nilVal = "sql.NullInt64{}"
-			typ = "sql.NullInt64"
+			nilVal = "msql.NullInt64{}"
+			typ = "msql.NullInt64"
 		}
 
 	case "smallint":
 		nilVal = "0"
 		typ = "int16"
 		if nullable {
-			nilVal = "sql.NullInt64{}"
-			typ = "sql.NullInt64"
+			nilVal = "msql.NullInt64{}"
+			typ = "msql.NullInt64"
 		}
 
 	case "mediumint", "int", "integer":
 		nilVal = "0"
 		typ = args.Int32Type
 		if nullable {
-			nilVal = "sql.NullInt64{}"
-			typ = "sql.NullInt64"
+			nilVal = "msql.NullInt64{}"
+			typ = "msql.NullInt64"
 		}
 
 	case "bigint":
 		nilVal = "0"
 		typ = "int64"
 		if nullable {
-			nilVal = "sql.NullInt64{}"
-			typ = "sql.NullInt64"
+			nilVal = "msql.NullInt64{}"
+			typ = "msql.NullInt64"
 		}
 
 	case "float":
 		nilVal = "0.0"
 		typ = "float32"
 		if nullable {
-			nilVal = "sql.NullFloat64{}"
-			typ = "sql.NullFloat64"
+			nilVal = "msql.NullFloat64{}"
+			typ = "msql.NullFloat64"
 		}
 
 	case "decimal", "double":
 		nilVal = "0.0"
 		typ = "float64"
 		if nullable {
-			nilVal = "sql.NullFloat64{}"
-			typ = "sql.NullFloat64"
+			nilVal = "msql.NullFloat64{}"
+			typ = "msql.NullFloat64"
 		}
 
 	case "binary", "varbinary", "tinyblob", "blob", "mediumblob", "longblob":
