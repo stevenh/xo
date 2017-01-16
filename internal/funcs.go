@@ -543,9 +543,15 @@ func (a *ArgType) convext(prefix string, f *Field, t *Field) string {
 	}
 
 	ft := f.Type
-	if strings.HasPrefix(ft, "sql.Null") {
-		expr = expr + "." + f.Type[8:]
-		ft = strings.ToLower(f.Type[8:])
+	if strings.Contains(ft, "sql.Null") {
+		var prefixLength int
+		if strings.HasPrefix(ft, "sql.Null") {
+			prefixLength = 8
+		} else if strings.HasPrefix(ft, "msql.Null") {
+			prefixLength = 9
+		}
+		expr = expr + "." + f.Type[prefixLength:]
+		ft = strings.ToLower(f.Type[prefixLength:])
 	}
 
 	if t.Type != ft {
