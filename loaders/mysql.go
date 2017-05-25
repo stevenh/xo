@@ -1,6 +1,7 @@
 package loaders
 
 import (
+	"fmt"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -27,7 +28,16 @@ func init() {
 		IndexList:       models.MyTableIndexes,
 		IndexColumnList: models.MyIndexColumns,
 		QueryColumnList: MyQueryColumns,
+		Esc: map[internal.EscType]func(string) string{
+			internal.SchemaEsc: escape,
+			internal.TableEsc:  escape,
+			internal.ColumnEsc: escape,
+		},
 	}
+}
+
+func escape(s string) string {
+	return fmt.Sprintf("`%v`", s)
 }
 
 // MySchema retrieves the name of the current schema.
