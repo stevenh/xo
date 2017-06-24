@@ -6,7 +6,6 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"github.com/knq/snaker"
 	"github.com/knq/xo/internal"
 	"github.com/knq/xo/models"
 )
@@ -202,20 +201,16 @@ switchDT:
 			typ = "mysql.NullTime"
 		}
 	case "time":
-		// TODO(steve): create a new type to deal with this properly
-		typ = "sql.RawBytes"
-
-	case "time":
 		// time is not supported by the MySQL driver. Can parse the string to time.Time in the user code.
 		typ = "string"
 
 	default:
 		if strings.HasPrefix(dt, args.Schema+".") {
 			// in the same schema, so chop off
-			typ = snaker.SnakeToCamelIdentifier(dt[len(args.Schema)+1:])
+			typ = internal.SnakeToIdentifier(dt[len(args.Schema)+1:])
 			nilVal = typ + "(0)"
 		} else {
-			typ = snaker.SnakeToCamelIdentifier(dt)
+			typ = internal.SnakeToIdentifier(dt)
 			nilVal = typ + "{}"
 		}
 	}

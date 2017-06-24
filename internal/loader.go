@@ -166,7 +166,7 @@ func (tl TypeLoader) ParseQuery(args *ArgType) error {
 		// process columns
 		for _, c := range colList {
 			f := &Field{
-				Name: snaker.SnakeToCamelIdentifier(c.ColumnName),
+				Name: SnakeToIdentifier(c.ColumnName),
 				Col:  c,
 			}
 			f.Len, f.NilType, f.Type = tl.ParseType(args, c.DataType, args.QueryAllowNulls && !c.NotNull)
@@ -350,7 +350,7 @@ func (tl TypeLoader) LoadEnumValues(args *ArgType, enumTpl *Enum) error {
 	// process enum values
 	for _, ev := range enumValues {
 		// chop off redundant enum name if applicable
-		name := snaker.SnakeToCamelIdentifier(ev.EnumValue)
+		name := SnakeToIdentifier(ev.EnumValue)
 		if strings.HasSuffix(strings.ToLower(name), strings.ToLower(enumTpl.Name)) {
 			n := name[:len(name)-len(enumTpl.Name)]
 			if len(n) > 0 {
@@ -393,7 +393,7 @@ func (tl TypeLoader) LoadProcs(args *ArgType) (map[string]*Proc, error) {
 
 		// create template
 		procTpl := &Proc{
-			Name:   snaker.SnakeToCamelIdentifier(name),
+			Name:   SnakeToIdentifier(name),
 			Schema: args.Schema,
 			Params: []*Field{},
 			Return: &Field{},
@@ -530,7 +530,7 @@ func (tl TypeLoader) LoadColumns(args *ArgType, typeTpl *Type) error {
 
 		// set col info
 		f := &Field{
-			Name: snaker.SnakeToCamelIdentifier(c.ColumnName),
+			Name: SnakeToIdentifier(c.ColumnName),
 			Col:  c,
 		}
 		f.Len, f.NilType, f.Type = tl.ParseType(args, c.DataType, !c.NotNull)

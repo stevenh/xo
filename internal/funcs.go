@@ -511,7 +511,6 @@ func (a *ArgType) goparamlist(fields []*Field, addPrefix bool, addType bool, ign
 			s = r
 		}
 
-		str = str + ", " + a.goparam(f, i)
 		// add the go type
 		if addType {
 			s += " " + a.retype(f.Type)

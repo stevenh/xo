@@ -219,7 +219,120 @@ func SingularizeIdentifier(s string) string {
 		s = inflector.Singularize(s)
 	}
 
-	return snaker.SnakeToCamelIdentifier(s)
+	return SnakeToIdentifier(s)
+}
+
+func SnakeToIdentifier(s string) string {
+	return postFixes(snaker.SnakeToCamelIdentifier(s))
+}
+
+// Order here is important
+var fixStrings = []string{
+	// Known acronyms
+	"P2P",
+	"FTP",
+	"CPU",
+	"URL",
+	"RDP",
+	"CFV",
+	"SPLA",
+	// Known single words
+	"Title",
+	"Dir",
+	"Prefix",
+	"Key",
+	"Login",
+	"Package",
+	"Threaded",
+	"Family",
+	"Blank",
+	"Site",
+	"Type",
+	"Allow",
+	"Provider",
+	"Billing",
+	"Upgrades",
+	"Permanent",
+	"Deadline",
+	"Updater",
+	"Event",
+	"Redirect",
+	"Display",
+	"Ordered",
+	"Open",
+	"Closed",
+	"Color",
+	"Signup",
+	// Known double words
+	"IncVAT",
+	"ExVAT",
+	"StartDate",
+	"StartTime",
+	"EndDate",
+	"EndTime",
+	"BoughtDate",
+	"RenewalDate",
+	"ActionTime",
+	"HoldTill",
+	"ValidTill",
+	// Direct Maps
+	"ProfileVerID",
+	"GfMachineProfileVer",
+	"OnlineETA",
+	"AutoRestartInterval",
+	"AutoRestartIntervalForce",
+	"AutoRestartTime",
+	"AutoRestartTimeForce",
+	"AccountServiceID",
+	"ShowMod",
+	"MaxCrashes",
+	"AltExe",
+	"MachinePortTypeID",
+	"ReadOnly",
+	"WebAdmin",
+	"HasVC",
+	"HasDS",
+	"HasGS",
+	"ProfileStateID",
+	"GameVersionID",
+	"MachinePortID",
+	"RenewLastComp",
+	"HasSpecBadges",
+	"OnWeb",
+	"EASStartTime",
+	"CanxDueDatetime",
+}
+
+var fixREs []*regexp.Regexp
+
+func init() {
+	fixREs = make([]*regexp.Regexp, len(fixStrings))
+	for i, s := range fixStrings {
+		fixREs[i] = regexp.MustCompile("(?i)" + s)
+	}
+}
+
+func postFixes(s string) string {
+	// Uppercase trailing id
+	if strings.HasSuffix(s, "id") {
+		s = s[:len(s)-2] + "ID"
+	}
+
+	// Uppercase words and correct to 'OR' if prefix is 'Or' (or = override)
+	if strings.HasPrefix(s, "Or") {
+		s = "OR" + strings.ToUpper(s[2:3]) + s[3:]
+	}
+
+	// Uppercase words if prefix is 'Is'
+	if strings.HasPrefix(s, "Is") {
+		s = "Is" + strings.ToUpper(s[2:3]) + s[3:]
+	}
+
+	for i, re := range fixREs {
+		s = re.ReplaceAllString(s, fixStrings[i])
+	}
+
+	return s
 }
 
 // TBuf is to hold the executed templates.
@@ -261,122 +374,4 @@ var sqlReservedNames = map[string]bool{
 	"order":  true,
 	"by":     true,
 	"select": true,
-}
-
-// isIdentifierChar determines if ch is a valid character for a Go identifier.
-//
-// see: go/src/go/scanner/scanner.go
-func isIdentifierChar(ch rune) bool {
-	return 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z' || ch == '_' || ch >= 0x80 && unicode.IsLetter(ch) ||
-		'0' <= ch && ch <= '9' || ch >= 0x80 && unicode.IsDigit(ch)
-}
-
-// replaceBadChars strips characters and character sequences that are invalid
-// characters for Go identifiers.
-func replaceBadChars(s string) string {
-	// strip bad characters
-	r := []rune{}
-	for _, ch := range s {
-		if isIdentifierChar(ch) {
-			r = append(r, ch)
-		} else {
-			r = append(r, '_')
-		}
-	}
-
-	return string(r)
-}
-
-var underscoreRE = regexp.MustCompile(`_+`)
-
-// SnakeToIdentifier wraps snaker.SnakeToCamel and adds logic specific for xo and go.
-func SnakeToIdentifier(s string) string {
-	// lowercase
-	s = strings.ToLower(s)
-
-	// replace bad chars with _
-	s = replaceBadChars(s)
-
-	// remove leading/trailing underscores
-	s = strings.TrimLeft(s, "_")
-	s = strings.TrimRight(s, "_")
-
-	// fix 2 or more __
-	s = underscoreRE.ReplaceAllString(s, "_")
-
-	// Uppercase Known acronyms
-	for _, v := range []string{
-		"p2p",
-		"ftp",
-		"cpu",
-		"url",
-		"rdp",
-		"cfv",
-		//"eta",
-		//"spla",
-	} {
-		s = strings.Replace(s, v, strings.ToUpper(v), -1)
-	}
-
-	// Direct Maps
-	for k, v := range map[string]string{
-		"profileverid":               "ProfileVerID",
-		"gf_machine_profilever":      "GfMachineProfileVer",
-		"online_eta":                 "OnlineETA",
-		"autorestart_interval":       "AutoRestartInterval",
-		"autorestart_interval_force": "AutoRestartIntervalForce",
-		"autorestart_time":           "AutoRestartTime",
-		"autorestart_time_force":     "AutoRestartTimeForce",
-		"accountserviceid":           "AccountServiceID",
-		"showmod":                    "ShowMod",
-		"maxcrashes":                 "MaxCrashes",
-		"altexe":                     "AltExe",
-		"machineporttypeid":          "MachinePortTypeID",
-		"readonly":                   "ReadOnly",
-		"webadmin":                   "WebAdmin",
-		"has_vc":                     "HasVC",
-		"has_ds":                     "HasDS",
-		"has_gs":                     "HasGS",
-		"profilestateid":             "ProfileStateID",
-		"spla":                       "SPLA",
-		"gameversionid":              "GameVersionID",
-		"machineportid":              "MachinePortID",
-	} {
-		if s == k {
-			s = v
-		}
-	}
-
-	// Tilecase Known Words
-	for _, v := range []string{
-		"title",
-		"dir",
-		"prefix",
-		"key",
-		"login",
-		"package",
-		"threaded",
-		"family",
-		"blank",
-		"site",
-		"type",
-		"allow",
-		//"ver",
-	} {
-		s = strings.Replace(s, v, strings.Title(v), -1)
-	}
-
-	s = snaker.SnakeToCamel(s)
-
-	// Uppercase trailing id
-	if strings.HasSuffix(s, "id") {
-		s = s[:len(s)-2] + "ID"
-	}
-
-	// Uppercase words if prefix is 'Is'
-	if strings.HasPrefix(s, "Is") {
-		s = "Is" + strings.ToUpper(s[2:3]) + s[3:]
-	}
-
-	return s
 }
