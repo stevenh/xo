@@ -380,7 +380,7 @@ func postFixes(s string) string {
 	}
 
 	// Uppercase words and correct to 'OR' if prefix is 'Or' (or = override)
-	if strings.HasPrefix(s, "Or") {
+	if strings.HasPrefix(s, "Or") && !strings.HasPrefix(s, "Orde") && !strings.HasPrefix(s, "Org") {
 		s = "OR" + strings.ToUpper(s[2:3]) + s[3:]
 	}
 
