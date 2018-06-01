@@ -8,10 +8,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/gedex/inflector"
-	"github.com/serenize/snaker"
+	"github.com/knq/snaker"
 )
 
 // ParseQuery takes the query in args and looks for strings in the form of
@@ -94,7 +93,7 @@ func (a *ArgType) ParseQuery(mask string, interpol bool) (string, []*QueryParam)
 }
 
 // IntRE matches Go int types.
-var IntRE = regexp.MustCompile(`^int(32|64)?$`)
+var IntRE = regexp.MustCompile(`^int\d*$`)
 
 // PrecScaleRE is the regexp that matches "(precision[,scale])" definitions in a
 // database.
@@ -153,7 +152,7 @@ func fmtIndexName(ixName string, tableName string) string {
 	}
 
 	// camel case name
-	return SnakeToIdentifier(ixName)
+	return snaker.SnakeToCamelIdentifier(ixName)
 }
 
 // BuildIndexFuncName builds the index func name for an index and its supplied
@@ -195,6 +194,208 @@ func GenRandomID() string {
 	return string(b)
 }
 
+// reverseIndexRune finds the last rune r in s, returning -1 if not present.
+func reverseIndexRune(s string, r rune) int {
+	if s == "" {
+		return -1
+	}
+
+	rs := []rune(s)
+	for i := len(rs) - 1; i >= 0; i-- {
+		if rs[i] == r {
+			return i
+		}
+	}
+
+	return -1
+}
+
+// SinguralizeIdentifier will singularize a identifier, returning it in
+// CamelCase.
+func SingularizeIdentifier(s string) string {
+	if i := reverseIndexRune(s, '_'); i != -1 {
+		s = s[:i] + "_" + inflector.Singularize(s[i+1:])
+	} else {
+		s = inflector.Singularize(s)
+	}
+
+	return SnakeToIdentifier(s)
+}
+
+func SnakeToIdentifier(s string) string {
+	return postFixes(snaker.SnakeToCamelIdentifier(s))
+}
+
+// Order here is important
+var fixStrings = []string{
+	// Known acronyms
+	"P2P",
+	"FTP",
+	"CPU",
+	"URL",
+	"RDP",
+	"CFV",
+	"SPLA",
+	// Known single words
+	"Title",
+	"Dir",
+	"Prefix",
+	"Key",
+	"Login",
+	"Package",
+	"Threaded",
+	"Family",
+	"Blank",
+	"Site",
+	"Type",
+	"Allow",
+	"Provider",
+	"Billing",
+	"Upgrades",
+	"Permanent",
+	"Deadline",
+	"Updater",
+	"Event",
+	"Redirect",
+	"Display",
+	"Ordered",
+	"Open",
+	"Closed",
+	"Color",
+	"Signup",
+	"Job",
+	"Machine",
+	"Version",
+	"Admin",
+	"Address",
+	"Created",
+	"Token",
+	"State",
+	"Rotation",
+	"Left",
+	"MatchLen",
+	"MatchGap",
+	"JobState",
+	"Progress",
+	"Failed",
+	"Start",
+	"State",
+	"JobETA",
+	"Error",
+	"Size",
+	"Region",
+	"Info",
+	"EventName",
+	"Capacity",
+	"Coverage",
+	"Attendence",
+	"Info",
+	"Seating",
+	"Interval",
+	"Restart",
+	// Known double words
+	"IncVAT",
+	"ExVAT",
+	"StartDate",
+	"StartTime",
+	"EndDate",
+	"EndTime",
+	"BoughtDate",
+	"RenewalDate",
+	"ActionTime",
+	"HoldTill",
+	"ValidTill",
+	"CryptPass",
+	"ClanAbbreviations",
+	"DayPhone",
+	"EveningPhone",
+	"GameBased",
+	"ClanName",
+	"PaymentPeriod",
+	"ServiceOption",
+	"ServiceValue",
+	"GameAreas",
+	"IconName",
+	"CreditTerm",
+	"ListPath",
+	"IconsOld",
+	"DateEnd",
+	"DateEASEnd",
+	"StaffCommence",
+	"ExitCode",
+	// Direct Maps
+	"DateOfbirth",
+	"SwitchPortID",
+	"ClanReceiveEmail",
+	"ClanShowBalance",
+	"ClanShowServices",
+	"ClanUseFullname",
+	"AutoCanxDays",
+	"SeatplanRevNum",
+	"SeatplanRevLastUpdate",
+	"ProfileVerID",
+	"GfMachineProfileVer",
+	"OnlineETA",
+	"AutoRestartInterval",
+	"AutoRestartIntervalForce",
+	"AutoRestartTime",
+	"AutoRestartTimeForce",
+	"AccountServiceID",
+	"ShowMod",
+	"MaxCrashes",
+	"AltExe",
+	"MachinePortTypeID",
+	"ReadOnly",
+	"WebAdmin",
+	"HasVC",
+	"HasDS",
+	"HasGS",
+	"ProfileStateID",
+	"GameVersionID",
+	"MachinePortID",
+	"RenewLastComp",
+	"HasSpecBadges",
+	"OnWeb",
+	"EASStartTime",
+	"CanxDueDatetime",
+	"XlsSeatingPath",
+	"HTMLSeatingListPath",
+	"HTMLSeatingListSkelPath",
+	"HTMLAttendlIstSkelPath",
+}
+
+var fixREs []*regexp.Regexp
+
+func init() {
+	fixREs = make([]*regexp.Regexp, len(fixStrings))
+	for i, s := range fixStrings {
+		fixREs[i] = regexp.MustCompile("(?i)" + s)
+	}
+}
+
+func postFixes(s string) string {
+	// Uppercase trailing id
+	if strings.HasSuffix(s, "id") {
+		s = s[:len(s)-2] + "ID"
+	}
+
+	// Uppercase words and correct to 'OR' if prefix is 'Or' (or = override)
+	if strings.HasPrefix(s, "Or") && !strings.HasPrefix(s, "Orde") && !strings.HasPrefix(s, "Org") {
+		s = "OR" + strings.ToUpper(s[2:3]) + s[3:]
+	}
+
+	// Uppercase words if prefix is 'Is'
+	if strings.HasPrefix(s, "Is") {
+		s = "Is" + strings.ToUpper(s[2:3]) + s[3:]
+	}
+
+	for i, re := range fixREs {
+		s = re.ReplaceAllString(s, fixStrings[i])
+	}
+
+	return s
+}
+
 // TBuf is to hold the executed templates.
 type TBuf struct {
 	TemplateType TemplateType
@@ -230,46 +431,8 @@ func (t TBufSlice) Less(i, j int) bool {
 	return strings.Compare(t[i].Subname, t[j].Subname) < 0
 }
 
-// isIdentifierChar determines if ch is a valid character for a Go identifier.
-//
-// see: go/src/go/scanner/scanner.go
-func isIdentifierChar(ch rune) bool {
-	return 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z' || ch == '_' || ch >= 0x80 && unicode.IsLetter(ch) ||
-		'0' <= ch && ch <= '9' || ch >= 0x80 && unicode.IsDigit(ch)
-}
-
-// replaceBadChars strips characters and character sequences that are invalid
-// characters for Go identifiers.
-func replaceBadChars(s string) string {
-	// strip bad characters
-	r := []rune{}
-	for _, ch := range s {
-		if isIdentifierChar(ch) {
-			r = append(r, ch)
-		} else {
-			r = append(r, '_')
-		}
-	}
-
-	return string(r)
-}
-
-var underscoreRE = regexp.MustCompile(`_+`)
-
-// SnakeToIdentifier wraps snaker.SnakeToCamel and adds logic specific for xo and go.
-func SnakeToIdentifier(s string) string {
-	// lowercase
-	s = strings.ToLower(s)
-
-	// replace bad chars with _
-	s = replaceBadChars(s)
-
-	// remove leading/trailing underscores
-	s = strings.TrimLeft(s, "_")
-	s = strings.TrimRight(s, "_")
-
-	// fix 2 or more __
-	s = underscoreRE.ReplaceAllString(s, "_")
-
-	return snaker.SnakeToCamel(s)
+var sqlReservedNames = map[string]bool{
+	"order":  true,
+	"by":     true,
+	"select": true,
 }

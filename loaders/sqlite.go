@@ -16,12 +16,8 @@ func init() {
 		ParamN:         func(int) string { return "?" },
 		MaskFunc:       func() string { return "?" },
 		ParseType:      SqParseType,
-		TableList: func(db models.XODB, schema string, relkind string) ([]*models.Table, error) {
-			return models.SqTables(db, relkind)
-		},
-		ColumnList: func(db models.XODB, schema string, table string) ([]*models.Column, error) {
-			return models.SqTableColumns(db, table)
-		},
+		TableList:      SqTables,
+		ColumnList:     SqTableColumns,
 		ForeignKeyList: func(db models.XODB, schema string, table string) ([]*models.ForeignKey, error) {
 			return models.SqTableForeignKeys(db, table)
 		},
@@ -51,7 +47,7 @@ func SqRelkind(relType internal.RelType) string {
 
 var uRE = regexp.MustCompile(`\s*unsigned\*`)
 
-// SqParseType parse a postgres type into a Go type based on the column
+// SqParseType parse a sqlite type into a Go type based on the column
 // definition.
 func SqParseType(args *internal.ArgType, dt string, nullable bool) (int, string, string) {
 	precision := 0
@@ -97,6 +93,10 @@ func SqParseType(args *internal.ArgType, dt string, nullable bool) (int, string,
 	case "blob":
 		typ = "[]byte"
 
+	case "timestamp", "datetime", "date", "timestamp with time zone", "time with time zone", "time without time zone", "timestamp without time zone":
+		nilVal = "xoutil.SqTime{}"
+		typ = "xoutil.SqTime"
+
 	default:
 		// case "varchar", "character", "varying character", "nchar", "native character", "nvarchar", "text", "clob", "datetime", "date", "time":
 		nilVal = `""`
@@ -115,6 +115,86 @@ func SqParseType(args *internal.ArgType, dt string, nullable bool) (int, string,
 	return precision, nilVal, typ
 }
 
+// SqTables returns the sqlite tables with the manual PK information added.
+// ManualPk is true when the table's primary key is not autoincrement.
+func SqTables(db models.XODB, schema string, relkind string) ([]*models.Table, error) {
+	var err error
+
+	// get the tables
+	rows, err := models.SqTables(db, relkind)
+	if err != nil {
+		return nil, err
+	}
+
+	// get the SQL for the Autoincrement detection
+	autoIncrements, err := models.SqAutoIncrements(db)
+	if err != nil {
+		// Set it to an empty set on error.
+		autoIncrements = []*models.SqAutoIncrement{}
+	}
+
+	// Add information about manual FK.
+	var tables []*models.Table
+	for _, row := range rows {
+		manualPk := true
+		// Look for a match in the table name where it contains the autoincrement
+		// keyword for the given table in the SQL.
+		for _, autoInc := range autoIncrements {
+			lSQL := strings.ToLower(autoInc.SQL)
+			if autoInc.TableName == row.TableName && strings.Contains(lSQL, "autoincrement") {
+				manualPk = false
+			} else {
+				cols, err := SqTableColumns(db, schema, row.TableName)
+				if err != nil {
+					return nil, err
+				}
+				for _, col := range cols {
+					if col.IsPrimaryKey == true {
+						dt := strings.ToUpper(col.DataType)
+						if dt == "INTEGER" {
+							manualPk = false
+						}
+						break
+					}
+				}
+			}
+		}
+		tables = append(tables, &models.Table{
+			TableName: row.TableName,
+			Type:      row.Type,
+			ManualPk:  manualPk,
+		})
+	}
+
+	return tables, nil
+}
+
+// SqTableColumns returns the sqlite table column info.
+func SqTableColumns(db models.XODB, schema string, table string) ([]*models.Column, error) {
+	var err error
+
+	// grab
+	rows, err := models.SqTableColumns(db, table)
+	if err != nil {
+		return nil, err
+	}
+
+	// fix columns
+	var cols []*models.Column
+	for _, row := range rows {
+		cols = append(cols, &models.Column{
+			FieldOrdinal: row.FieldOrdinal,
+			ColumnName:   row.ColumnName,
+			DataType:     row.DataType,
+			NotNull:      row.NotNull,
+			DefaultValue: row.DefaultValue,
+			IsPrimaryKey: row.PkColIndex != 0,
+		})
+	}
+
+	return cols, nil
+}
+
 // SqQueryColumns parses a sqlite query and generates a type for it.
 func SqQueryColumns(args *internal.ArgType, inspect []string) ([]*models.Column, error) {
 	var err error
@@ -129,5 +209,5 @@ func SqQueryColumns(args *internal.ArgType, inspect []string) ([]*models.Column,
 	}
 
 	// load column information
-	return models.SqTableColumns(args.DB, xoid)
+	return SqTableColumns(args.DB, "", xoid)
 }

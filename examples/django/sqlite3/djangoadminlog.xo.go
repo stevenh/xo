@@ -6,6 +6,7 @@ package sqlite3
 import (
 	"database/sql"
 	"errors"
+	"time"
 )
 
 // DjangoAdminLog represents a row from 'django_admin_log'.
@@ -17,7 +18,7 @@ type DjangoAdminLog struct {
 	ChangeMessage string         `json:"change_message"`  // change_message
 	ContentTypeID sql.NullInt64  `json:"content_type_id"` // content_type_id
 	UserID        int            `json:"user_id"`         // user_id
-	ActionTime    string         `json:"action_time"`     // action_time
+	ActionTime    time.Time      `json:"action_time"`     // action_time
 
 	// xo fields
 	_exists, _deleted bool
@@ -42,7 +43,7 @@ func (dal *DjangoAdminLog) Insert(db XODB) error {
 		return errors.New("insert failed: already exists")
 	}
 
-	// sql query
+	// sql insert query, primary key provided by autoincrement
 	const sqlstr = `INSERT INTO django_admin_log (` +
 		`object_id, object_repr, action_flag, change_message, content_type_id, user_id, action_time` +
 		`) VALUES (` +

@@ -1,10 +1,10 @@
 #!/bin/bash
 
-PGDB=pgsql://xodb:xodb@localhost/xodb
-MYDB=mysql://xodb:xodb@localhost/xodb
-SQDB=file:xodb.sqlite3
-ORDB=oracle://xodb:xodb@$(docker port orcl 1521)/orcl
-MSDB=mssql://xodb:xodb@sqlexpress/xodb
+PGDB=pg://xodb:xodb@localhost/xodb
+MYDB=my://xodb:xodb@localhost/xodb
+MSDB=ms://xodb:xodb@localhost/xodb
+SQDB=sq:xodb.sqlite3
+ORDB=or://xodb:xodb@$(docker port orcl 1521)/xe.oracle.docker
 
 DEST=$1
 
@@ -48,6 +48,18 @@ FROM pg_type t
 WHERE n.nspname = %%schema string%% AND t.typname = %%enum string%%
 ENDSQL
 
+# postgres sequence list query
+COMMENT='Sequence represents a table that references a sequence.'
+$XOBIN $PGDB -N -M -B -T Sequence -F PgSequences -o $DEST $EXTRA << ENDSQL
+SELECT
+  t.relname::varchar AS table_name
+FROM pg_class s
+  JOIN pg_depend d ON d.objid = s.oid
+  JOIN pg_class t ON d.objid = s.oid AND d.refobjid = t.oid
+  JOIN pg_namespace n ON n.oid = s.relnamespace
+WHERE n.nspname = %%schema string%% AND s.relkind = 'S'
+ENDSQL
+
 # postgres proc list query
 COMMENT='Proc represents a stored procedure.'
 $XOBIN $PGDB -N -M -B -T Proc -F PgProcs --query-type-comment "$COMMENT" -o $DEST $EXTRA << ENDSQL
@@ -74,14 +86,15 @@ COMMENT='Table represents table info.'
 $XOBIN $PGDB -N -M -B -T Table -F PgTables --query-type-comment "$COMMENT" -o $DEST $EXTRA << ENDSQL
 SELECT
   c.relkind::varchar AS type,
-  c.relname::varchar AS table_name
+  c.relname::varchar AS table_name,
+  false::boolean AS manual_pk
 FROM pg_class c
   JOIN ONLY pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = %%schema string%% AND c.relkind = %%relkind string%%
 ENDSQL
 
 # postgres table column list query
-FIELDS='FieldOrdinal int,ColumnName string,DataType string,NotNull bool,DefaultValue sql.NullString,IsPrimaryKey bool'
+FIELDS='FieldOrdinal int,ColumnName string,DataType string,NotNull bool,DefaultValue sql.NullString,IsPrimaryKey bool,IsAutoIncrement bool'
 COMMENT='Column represents column info.'
 $XOBIN $PGDB -N -M -B -T Column -F PgTableColumns -Z "$FIELDS" --query-type-comment "$COMMENT" -o $DEST $EXTRA << ENDSQL
 SELECT
@@ -185,6 +198,14 @@ FROM information_schema.columns
 WHERE data_type = 'enum' AND table_schema = %%schema string%% AND column_name = %%enum string%%
 ENDSQL
 
+# mysql autoincrement list query
+$XOBIN $MYDB -N -M -B -T MyAutoIncrement -F MyAutoIncrements -o $DEST $EXTRA << ENDSQL
+SELECT
+  table_name
+FROM information_schema.tables
+WHERE auto_increment IS NOT null AND table_schema = %%schema string%%
+ENDSQL
+
 # mysql proc list query
 $XOBIN $MYDB -a -N -M -B -T Proc -F MyProcs -o $DEST $EXTRA << ENDSQL
 SELECT
@@ -221,7 +242,8 @@ SELECT
   IF(data_type = 'enum', column_name, column_type) AS data_type,
   IF(is_nullable = 'YES', false, true) AS not_null,
   column_default AS default_value,
-  IF(column_key = 'PRI', true, false) AS is_primary_key
+  IF(column_key = 'PRI', true, false) AS is_primary_key,
+  IF(extra = 'auto_increment', true, false) AS is_auto_increment
 FROM information_schema.columns
 WHERE table_schema = %%schema string%% AND table_name = %%table string%%
 ORDER BY ordinal_position
@@ -257,6 +279,15 @@ WHERE index_schema = %%schema string%% AND table_name = %%table string%% AND ind
 ORDER BY seq_in_index
 ENDSQL
 
+# sqlite autoincrement query
+$XOBIN $SQDB -N -M -B -T SqAutoIncrement -F SqAutoIncrements -o $DEST $EXTRA << ENDSQL
+SELECT
+  name as table_name, sql
+FROM sqlite_master
+WHERE type='table'
+ORDER BY name
+ENDSQL
+
 # sqlite table list query
 $XOBIN $SQDB -a -N -M -B -T Table -F SqTables -o $DEST $EXTRA << ENDSQL
 SELECT
@@ -266,8 +297,8 @@ WHERE tbl_name NOT LIKE 'sqlite_%' AND type = %%relkind string%%
 ENDSQL
 
 # sqlite table column list query
-FIELDS='FieldOrdinal int,ColumnName string,DataType string,NotNull bool,DefaultValue sql.NullString,IsPrimaryKey bool'
-$XOBIN $SQDB -a -I -N -M -B -T Column -F SqTableColumns -Z "$FIELDS" -o $DEST $EXTRA << ENDSQL
+FIELDS='FieldOrdinal int,ColumnName string,DataType string,NotNull bool,DefaultValue sql.NullString,PkColIndex int'
+$XOBIN $SQDB -I -N -M -B -T SqColumn -F SqTableColumns -Z "$FIELDS" -o $DEST $EXTRA << ENDSQL
 PRAGMA table_info(%%table string,interpolate%%)
 ENDSQL
 
@@ -287,6 +318,86 @@ ENDSQL
 FIELDS='SeqNo int,Cid int,ColumnName string'
 $XOBIN $SQDB -a -I -N -M -B -T IndexColumn -F SqIndexColumns -Z "$FIELDS" -o $DEST $EXTRA << ENDSQL
 PRAGMA index_info(%%index string,interpolate%%)
+ENDSQL
+
+# mssql identity table list query
+$XOBIN $MSDB -N -M -B -T MsIdentity -F MsIdentities -o $DEST $EXTRA << ENDSQL
+SELECT o.name as table_name
+FROM sys.objects o inner join sys.columns c on o.object_id = c.object_id
+WHERE c.is_identity = 1
+AND schema_name(o.schema_id) = %%schema string%% AND o.type = 'U'
+ENDSQL
+
+# mssql table list query
+$XOBIN $MSDB -a -N -M -B -T Table -F MsTables -o $DEST $EXTRA << ENDSQL
+SELECT
+  xtype AS type,
+  name AS table_name
+FROM sysobjects
+WHERE SCHEMA_NAME(uid) = %%schema string%% AND xtype = %%relkind string%%
+ENDSQL
+
+# mssql table column list query
+$XOBIN $MSDB -a -N -M -B -T Column -F MsTableColumns -o $DEST $EXTRA << ENDSQL
+SELECT
+  c.colid AS field_ordinal,
+  c.name AS column_name,
+  TYPE_NAME(c.xtype)+IIF(c.prec > 0, '('+CAST(c.prec AS varchar)+IIF(c.scale > 0,','+CAST(c.scale AS varchar),'')+')', '') as data_type,
+  IIF(c.isnullable=1, 0, 1) AS not_null,
+  x.text AS default_value,
+  IIF(COALESCE((
+    SELECT count(z.colid)
+    FROM sysindexes i
+      INNER JOIN sysindexkeys z ON i.id = z.id AND i.indid = z.indid AND z.colid = c.colid
+    WHERE i.id = o.id AND i.name = k.name
+  ), 0) > 0, 1, 0) AS is_primary_key
+FROM syscolumns c
+  JOIN sysobjects o ON o.id = c.id
+  LEFT JOIN sysobjects k ON k.xtype='PK' AND k.parent_obj = o.id
+  LEFT JOIN syscomments x ON x.id = c.cdefault
+WHERE o.type IN('U', 'V') AND SCHEMA_NAME(o.uid) = %%schema string%% AND o.name = %%table string%%
+ORDER BY c.colid
+ENDSQL
+
+# mssql table foreign key list query
+$XOBIN $MSDB -a -N -M -B -T ForeignKey -F MsTableForeignKeys -o $DEST $EXTRA << ENDSQL
+SELECT
+  f.name AS foreign_key_name,
+  c.name AS column_name,
+  o.name AS ref_table_name,
+  x.name AS ref_column_name
+FROM sysobjects f
+  INNER JOIN sysobjects t ON f.parent_obj = t.id
+  INNER JOIN sysreferences r ON f.id = r.constid
+  INNER JOIN sysobjects o ON r.rkeyid = o.id
+  INNER JOIN syscolumns c ON r.rkeyid = c.id AND r.rkey1 = c.colid
+  INNER JOIN syscolumns x ON r.fkeyid = x.id AND r.fkey1 = x.colid
+WHERE f.type = 'F' AND t.type = 'U' AND SCHEMA_NAME(t.uid) = %%schema string%% AND t.name = %%table string%%
+ENDSQL
+
+# mssql table index list query
+$XOBIN $MSDB -a -N -M -B -T Index -F MsTableIndexes -o $DEST $EXTRA << ENDSQL
+SELECT
+  i.name AS index_name,
+  i.is_primary_key AS is_primary,
+  i.is_unique
+FROM sys.indexes i
+  INNER JOIN sysobjects o ON i.object_id = o.id
+WHERE i.name IS NOT NULL AND o.type = 'U' AND SCHEMA_NAME(o.uid) = %%schema string%% AND o.name = %%table string%%
+ENDSQL
+
+# mssql index column list query
+$XOBIN $MSDB -a -N -M -B -T IndexColumn -F MsIndexColumns -o $DEST $EXTRA << ENDSQL
+SELECT
+  k.keyno AS seq_no,
+  k.colid AS cid,
+  c.name AS column_name
+FROM sysindexes i
+  INNER JOIN sysobjects o ON i.id = o.id
+  INNER JOIN sysindexkeys k ON k.id = o.id AND k.indid = i.indid
+  INNER JOIN syscolumns c ON c.id = o.id AND c.colid = k.colid
+WHERE o.type = 'U' AND SCHEMA_NAME(o.uid) = %%schema string%% AND o.name = %%table string%% AND i.name = %%index string%%
+ORDER BY k.keyno
 ENDSQL
 
 # oracle proc list query
@@ -360,76 +471,4 @@ SELECT
 FROM all_ind_columns
 WHERE index_owner = UPPER(%%schema string%%) AND table_name = UPPER(%%table string%%) AND index_name = UPPER(%%index string%%)
 ORDER BY column_position
-ENDSQL
-
-# mssql table list query
-$XOBIN $MSDB -a -N -M -B -T Table -F MsTables -o $DEST $EXTRA << ENDSQL
-SELECT
-  xtype AS type,
-  name AS table_name
-FROM sysobjects
-WHERE SCHEMA_NAME(uid) = %%schema string%% AND xtype = %%relkind string%%
-ENDSQL
-
-# mssql table column list query
-$XOBIN $MSDB -a -N -M -B -T Column -F MsTableColumns -o $DEST $EXTRA << ENDSQL
-SELECT
-  c.colid AS field_ordinal,
-  c.name AS column_name,
-  TYPE_NAME(c.xtype)+IIF(c.prec > 0, '('+CAST(c.prec AS varchar)+IIF(c.scale > 0,','+CAST(c.scale AS varchar),'')+')', '') as data_type,
-  IIF(c.isnullable=1, 0, 1) AS not_null,
-  x.text AS default_value,
-  IIF(COALESCE((
-    SELECT count(z.colid)
-    FROM sysindexes i
-      INNER JOIN sysindexkeys z ON i.id = z.id AND i.indid = z.indid AND z.colid = c.colid
-    WHERE i.id = o.id AND i.name = k.name
-  ), 0) > 0, 1, 0) AS is_primary_key
-FROM syscolumns c
-  JOIN sysobjects o ON o.id = c.id
-  LEFT JOIN sysobjects k ON k.xtype='PK' AND k.parent_obj = o.id
-  LEFT JOIN syscomments x ON x.id = c.cdefault
-WHERE o.type IN('U', 'V') AND SCHEMA_NAME(o.uid) = %%schema string%% AND o.name = %%table string%%
-ORDER BY c.colid
-ENDSQL
-
-# mssql table foreign key list query
-$XOBIN $MSDB -a -N -M -B -T ForeignKey -F MsTableForeignKeys -o $DEST $EXTRA << ENDSQL
-SELECT
-  f.name AS foreign_key_name,
-  c.name AS column_name,
-  o.name AS ref_table_name,
-  x.name AS ref_column_name
-FROM sysobjects f
-  INNER JOIN sysobjects t ON f.parent_obj = t.id
-  INNER JOIN sysreferences r ON f.id = r.constid
-  INNER JOIN sysobjects o ON r.rkeyid = o.id
-  INNER JOIN syscolumns c ON r.rkeyid = c.id AND r.rkey1 = c.colid
-  INNER JOIN syscolumns x ON r.fkeyid = x.id AND r.fkey1 = x.colid
-WHERE f.type = 'F' AND t.type = 'U' AND SCHEMA_NAME(t.uid) = %%schema string%% AND t.name = %%table string%%
-ENDSQL
-
-# mssql table index list query
-$XOBIN $MSDB -a -N -M -B -T Index -F MsTableIndexes -o $DEST $EXTRA << ENDSQL
-SELECT
-  i.name AS index_name,
-  i.is_primary_key AS is_primary,
-  i.is_unique
-FROM sys.indexes i
-  INNER JOIN sysobjects o ON i.object_id = o.id
-WHERE i.name IS NOT NULL AND o.type = 'U' AND SCHEMA_NAME(o.uid) = %%schema string%% AND o.name = %%table string%%
-ENDSQL
-
-# mssql index column list query
-$XOBIN $MSDB -a -N -M -B -T IndexColumn -F MsIndexColumns -o $DEST $EXTRA << ENDSQL
-SELECT
-  k.keyno AS seq_no,
-  k.colid AS cid,
-  c.name AS column_name
-FROM sysindexes i
-  INNER JOIN sysobjects o ON i.id = o.id
-  INNER JOIN sysindexkeys k ON k.id = o.id AND k.indid = i.indid
-  INNER JOIN syscolumns c ON c.id = o.id AND c.colid = k.colid
-WHERE o.type = 'U' AND SCHEMA_NAME(o.uid) = %%schema string%% AND o.name = %%table string%% AND i.name = %%index string%%
-ORDER BY k.keyno
 ENDSQL

@@ -45,7 +45,7 @@ type ArgType struct {
 	IgnoreFields []string `arg:"--ignore-fields,help:fields to exclude from the generated Go code types"`
 
 	// ForeignKeyMode is the foreign key mode for generating foreign key names.
-	ForeignKeyMode *FkMode `arg:"--fk-mode,-k,help:sets mode for naming foreign key funcs in generated Go code [values: <smart|parent|field|key>] [default: smart]"`
+	ForeignKeyMode *FkMode `arg:"--fk-mode,-k,help:sets mode for naming foreign key funcs in generated Go code [values: <smart|parent|field|key>]"`
 
 	// UseIndexNames toggles using index names.
 	//
@@ -95,6 +95,9 @@ type ArgType struct {
 	// QueryFields are the fields to scan the result to.
 	QueryFields string `arg:"--query-fields,-Z,help:comma separated list of field names to scan query's results to the query's associated Go type"`
 
+	// QueryAllowNulls indicates that custom query results can contain null types.
+	QueryAllowNulls bool `arg:"--query-allow-nulls,-U,help:use query column NULL state"`
+
 	// EscapeAll toggles escaping schema, table, and column names in SQL queries.
 	EscapeAll bool `arg:"--escape-all,-X,help:escape all names in SQL queries"`
 
@@ -116,6 +119,9 @@ type ArgType struct {
 	// TemplatePath is the path to use the user supplied templates instead of
 	// the built in versions.
 	TemplatePath string `arg:"--template-path,help:user supplied template path"`
+
+	// Tags is the list of build tags to add to generated Go files.
+	Tags string `arg:"--tags,help:build tags to add to package header"`
 
 	// Path is the output path, as derived from Out.
 	Path string `arg:"-"`
@@ -201,6 +207,12 @@ func NewDefaultArgs() *ArgType {
 			"StringSlice": "ss",
 		},
 	}
+}
+
+// Description provides the description for the command output.
+func (a *ArgType) Description() string {
+	return `xo is a command line utility to generate Go code from a database schema.
+`
 }
 
 // Args are the application arguments.

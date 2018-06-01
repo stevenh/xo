@@ -8,6 +8,7 @@ import (
 
 	_ "github.com/lib/pq"
 
+	"github.com/knq/snaker"
 	"github.com/knq/xo/internal"
 	"github.com/knq/xo/models"
 )
@@ -21,7 +22,7 @@ func init() {
 		EnumValueList:  models.PgEnumValues,
 		ProcList:       models.PgProcs,
 		ProcParamList:  models.PgProcParams,
-		TableList:      models.PgTables,
+		TableList:      PgTables,
 		ColumnList: func(db models.XODB, schema string, table string) ([]*models.Column, error) {
 			return models.PgTableColumns(db, schema, table, internal.Args.EnablePostgresOIDs)
 		},
@@ -79,7 +80,7 @@ func PgParseType(args *internal.ArgType, dt string, nullable bool) (int, string,
 			typ = "sql.NullBool"
 		}
 
-	case "character", "character varying", "text", "money":
+	case "character", "character varying", "text", "money", "inet":
 		nilVal = `""`
 		typ = "string"
 		if nullable {
@@ -150,19 +151,12 @@ func PgParseType(args *internal.ArgType, dt string, nullable bool) (int, string,
 		asSlice = true
 		typ = "byte"
 
-	case "date", "timestamp with time zone":
-		typ = "*time.Time"
+	case "date", "timestamp with time zone", "time with time zone", "time without time zone", "timestamp without time zone":
+		nilVal = "time.Time{}"
+		typ = "time.Time"
 		if nullable {
 			nilVal = "pq.NullTime{}"
 			typ = "pq.NullTime"
-		}
-
-	case "time with time zone", "time without time zone", "timestamp without time zone":
-		nilVal = "0"
-		typ = "int64"
-		if nullable {
-			nilVal = "sql.NullInt64{}"
-			typ = "sql.NullInt64"
 		}
 
 	case "interval":
@@ -183,13 +177,20 @@ func PgParseType(args *internal.ArgType, dt string, nullable bool) (int, string,
 		asSlice = true
 		typ = "byte"
 
+	case "hstore":
+		typ = "hstore.Hstore"
+
+	case "uuid":
+		nilVal = "uuid.New()"
+		typ = "uuid.UUID"
+
 	default:
 		if strings.HasPrefix(dt, args.Schema+".") {
 			// in the same schema, so chop off
-			typ = internal.SnakeToIdentifier(dt[len(args.Schema)+1:])
+			typ = snaker.SnakeToCamelIdentifier(dt[len(args.Schema)+1:])
 			nilVal = typ + "(0)"
 		} else {
-			typ = internal.SnakeToIdentifier(dt)
+			typ = snaker.SnakeToCamelIdentifier(dt)
 			nilVal = typ + "{}"
 		}
 	}
@@ -224,6 +225,44 @@ func PgQueryStrip(query []string, queryComments []string) {
 			queryComments[i+1] = ""
 		}
 	}
+}
+
+// PgTables returns the Postgres tables with the manual PK information added.
+// ManualPk is true when the table does not have a sequence defined.
+func PgTables(db models.XODB, schema string, relkind string) ([]*models.Table, error) {
+	var err error
+
+	// get the tables
+	rows, err := models.PgTables(db, schema, relkind)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the tables that have a sequence defined.
+	sequences, err := models.PgSequences(db, schema)
+	if err != nil {
+		// Set it to an empty set on error.
+		sequences = []*models.Sequence{}
+	}
+
+	// Add information about manual FK.
+	var tables []*models.Table
+	for _, row := range rows {
+		manualPk := true
+		// Look for a match in the table name where it contains the sequence
+		for _, sequence := range sequences {
+			if sequence.TableName == row.TableName {
+				manualPk = false
+			}
+		}
+		tables = append(tables, &models.Table{
+			TableName: row.TableName,
+			Type:      row.Type,
+			ManualPk:  manualPk,
+		})
+	}
+
+	return tables, nil
 }
 
 // PgQueryColumns parses the query and generates a type for it.

@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/gedex/inflector"
-	"github.com/serenize/snaker"
 
+	"github.com/knq/snaker"
 	"github.com/knq/xo/models"
 )
 
@@ -169,7 +169,7 @@ func (tl TypeLoader) ParseQuery(args *ArgType) error {
 				Name: SnakeToIdentifier(c.ColumnName),
 				Col:  c,
 			}
-			f.Len, f.NilType, f.Type = tl.ParseType(args, c.DataType, false)
+			f.Len, f.NilType, f.Type = tl.ParseType(args, c.DataType, args.QueryAllowNulls && !c.NotNull)
 			typeTpl.Fields = append(typeTpl.Fields, f)
 		}
 	} else {
@@ -265,6 +265,17 @@ func (tl TypeLoader) LoadSchema(args *ArgType) error {
 		return err
 	}
 
+	// load views
+	viewMap, err := tl.LoadRelkind(args, View)
+	if err != nil {
+		return err
+	}
+
+	// merge views with the tableMap
+	for k, v := range viewMap {
+		tableMap[k] = v
+	}
+
 	// load foreign keys
 	_, err = tl.LoadForeignKeys(args, tableMap)
 	if err != nil {
@@ -299,7 +310,7 @@ func (tl TypeLoader) LoadEnums(args *ArgType) (map[string]*Enum, error) {
 	enumMap := map[string]*Enum{}
 	for _, e := range enumList {
 		enumTpl := &Enum{
-			Name:              inflector.Singularize(SnakeToIdentifier(e.EnumName)),
+			Name:              SingularizeIdentifier(e.EnumName),
 			Schema:            args.Schema,
 			Values:            []*EnumValue{},
 			Enum:              e,
@@ -390,6 +401,7 @@ func (tl TypeLoader) LoadProcs(args *ArgType) (map[string]*Proc, error) {
 		}
 
 		// parse return type into template
+		// TODO: fix this so that nullable types can be returned
 		_, procTpl.Return.NilType, procTpl.Return.Type = tl.ParseType(args, p.ReturnType, false)
 
 		// load proc parameters
@@ -428,6 +440,8 @@ func (tl TypeLoader) LoadProcParams(args *ArgType, procTpl *Proc) error {
 		paramTpl := &Field{
 			Name: fmt.Sprintf("v%d", i),
 		}
+
+		// TODO: fix this so that nullable types can be used as parameters
 		_, _, paramTpl.Type = tl.ParseType(args, strings.TrimSpace(p.ParamType), false)
 
 		// add to proc params
@@ -457,7 +471,7 @@ func (tl TypeLoader) LoadRelkind(args *ArgType, relType RelType) (map[string]*Ty
 	for _, ti := range tableList {
 		// create template
 		typeTpl := &Type{
-			Name:    inflector.Singularize(SnakeToIdentifier(ti.TableName)),
+			Name:    SnakeToIdentifier(ti.TableName),
 			Schema:  args.Schema,
 			RelType: relType,
 			Fields:  []*Field{},
@@ -475,7 +489,7 @@ func (tl TypeLoader) LoadRelkind(args *ArgType, relType RelType) (map[string]*Ty
 
 	// generate table templates
 	for _, t := range tableMap {
-		err = args.ExecuteTemplate(TypeTemplate, t.Name, "", t)
+		err = args.ExecuteTemplate(TypeTemplate, t.Table.TableName, "", t)
 		if err != nil {
 			return nil, err
 		}
@@ -523,7 +537,15 @@ func (tl TypeLoader) LoadColumns(args *ArgType, typeTpl *Type) error {
 
 		// set primary key
 		if c.IsPrimaryKey && len(columnList) > 1 {
-			typeTpl.PrimaryKey = f
+			if typeTpl.PrimaryKey == nil {
+				typeTpl.PrimaryKey = make([]*Field, 0, 2)
+			}
+			typeTpl.PrimaryKey = append(typeTpl.PrimaryKey, f)
+		}
+
+		// set auto increment
+		if c.IsAutoIncrement {
+			typeTpl.AutoIncrement = f
 		}
 
 		// append col to template fields
@@ -553,7 +575,7 @@ func (tl TypeLoader) LoadForeignKeys(args *ArgType, tableMap map[string]*Type) (
 
 	// generate templates
 	for _, fk := range fkMap {
-		err = args.ExecuteTemplate(ForeignKeyTemplate, fk.Type.Name, fk.ForeignKey.ForeignKeyName, fk)
+		err = args.ExecuteTemplate(ForeignKeyTemplate, fk.Type.Table.TableName, fk.ForeignKey.ForeignKeyName, fk)
 		if err != nil {
 			return nil, err
 		}
@@ -606,7 +628,11 @@ func (tl TypeLoader) LoadTableForeignKeys(args *ArgType, tableMap map[string]*Ty
 
 		// no ref col, but have ref tpl, so use primary key
 		if refTpl != nil && refCol == nil {
-			refCol = refTpl.PrimaryKey
+			if len(refTpl.PrimaryKey) > 1 {
+				return errors.New("unsupported multi field primary key")
+			} else if len(refTpl.PrimaryKey) == 1 {
+				refCol = refTpl.PrimaryKey[0]
+			}
 		}
 
 		// check everything was found
@@ -648,7 +674,7 @@ func (tl TypeLoader) LoadIndexes(args *ArgType, tableMap map[string]*Type) (map[
 
 	// generate templates
 	for _, ix := range ixMap {
-		err = args.ExecuteTemplate(IndexTemplate, ix.Type.Name, ix.Index.IndexName, ix)
+		err = args.ExecuteTemplate(IndexTemplate, ix.Type.Table.TableName, ix.Index.IndexName, ix)
 		if err != nil {
 			return nil, err
 		}
@@ -671,7 +697,7 @@ func (tl TypeLoader) LoadTableIndexes(args *ArgType, typeTpl *Type, ixMap map[st
 	// process indexes
 	for _, ix := range indexList {
 		// save whether or not the primary key index was processed
-		priIxLoaded = priIxLoaded || ix.IsPrimary
+		priIxLoaded = priIxLoaded || ix.IsPrimary || (ix.Origin == "pk")
 
 		// create index template
 		ixTpl := &Index{
@@ -690,7 +716,7 @@ func (tl TypeLoader) LoadTableIndexes(args *ArgType, typeTpl *Type, ixMap map[st
 		// build func name
 		args.BuildIndexFuncName(ixTpl)
 
-		ixMap[ix.IndexName] = ixTpl
+		ixMap[typeTpl.Table.TableName+"_"+ix.IndexName] = ixTpl
 	}
 
 	// search for primary key if it was skipped being set in the type
@@ -698,8 +724,10 @@ func (tl TypeLoader) LoadTableIndexes(args *ArgType, typeTpl *Type, ixMap map[st
 	if pk == nil {
 		for _, f := range typeTpl.Fields {
 			if f.Col.IsPrimaryKey {
-				pk = f
-				break
+				if pk == nil {
+					pk = make([]*Field, 0, 2)
+				}
+				pk = append(pk, f)
 			}
 		}
 	}
@@ -707,13 +735,13 @@ func (tl TypeLoader) LoadTableIndexes(args *ArgType, typeTpl *Type, ixMap map[st
 	// if no primary key index loaded, but a primary key column was defined in
 	// the type, then create the definition here. this is needed for sqlite, as
 	// sqlite doesn't define primary keys in its index list
-	if args.LoaderType != "ora" && !priIxLoaded && pk != nil {
-		ixName := typeTpl.Table.TableName + "_" + pk.Col.ColumnName + "_pkey"
+	if args.LoaderType != "ora" && !priIxLoaded && len(pk) == 1 {
+		ixName := typeTpl.Table.TableName + "_" + pk[0].Col.ColumnName + "_pkey"
 		ixMap[ixName] = &Index{
-			FuncName: typeTpl.Name + "By" + pk.Name,
+			FuncName: typeTpl.Name + "By" + pk[0].Name,
 			Schema:   args.Schema,
 			Type:     typeTpl,
-			Fields:   []*Field{pk},
+			Fields:   []*Field{pk[0]},
 			Index: &models.Index{
 				IndexName: ixName,
 				IsUnique:  true,
