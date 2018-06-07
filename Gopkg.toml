@@ -1,0 +1,43 @@
+[[constraint]]
+  branch = "master"
+  name = "github.com/alexflint/go-arg"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/denisenkom/go-mssqldb"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/gedex/inflector"
+
+[[constraint]]
+  name = "github.com/go-sql-driver/mysql"
+  version = "1.4.0"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/knq/dburl"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/knq/snaker"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/knq/xoutil"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/lib/pq"
+
+[[constraint]]
+  name = "github.com/mattn/go-sqlite3"
+  version = "1.7.0"
+
+[[constraint]]
+  name = "gopkg.in/rana/ora.v4"
+  version = "4.1.15"
+
+[prune]
+  go-tests = true
+  unused-packages = true
